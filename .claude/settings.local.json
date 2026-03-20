@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(npm create:*)"
+      "Bash(npm create:*)",
+      "Bash(mkdir -p \"/Users/hanszhu/Desktop/OIHOME/frontend/api/problems/[oj]/[contestId]\")",
+      "Bash(rm -f \"/Users/hanszhu/Desktop/OIHOME/frontend/api/problems/[oj]/[id].ts\")"
     ]
   }
 }

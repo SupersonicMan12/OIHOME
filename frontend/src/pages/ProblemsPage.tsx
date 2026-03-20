@@ -112,7 +112,7 @@ export default function ProblemsPage() {
               {problems.map(p => (
                 <tr
                   key={`${p.oj}-${p.id}`}
-                  onClick={() => navigate(`/problem/${p.oj}/${p.contestId}/${p.index}`)}
+                  onClick={() => navigate(`/problem/${p.oj}/${p.contestId}/${p.index}?rating=${p.difficulty ?? ''}`)}
                   className="problem-row"
                 >
                   <td><span className={`oj-badge oj-${p.oj}`}>{p.ojLabel}</span></td>

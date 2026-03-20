@@ -1,68 +1,95 @@
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import Editor from '@monaco-editor/react'
 import './ProblemPage.css'
 
 const LANGUAGES = ['C++', 'Python', 'Java', 'JavaScript']
 
-const MOCK_PROBLEM = {
-  title: 'Watermelon',
-  oj: 'Codeforces',
-  timeLimit: '1 second',
-  memoryLimit: '256 MB',
-  statement: `Pete and Billy found a very large watermelon and want to split it between themselves.
+interface ProblemData {
+  title: string
+  timeLimit: string
+  memoryLimit: string
+  statementHtml: string
+  url: string
+}
 
-They want to cut it into two non-empty parts so that each part's weight is even. Both boys have equal chances of getting either part.
-
-You are given the weight w of the watermelon. Find if it is possible to cut it so that both parts weigh an even number of pounds.`,
-  inputSpec: 'The first (and only) line contains one integer w (1 ≤ w ≤ 100) — the weight of the watermelon.',
-  outputSpec: 'Print YES if it is possible to cut the watermelon into two even-weighted parts, and NO otherwise.',
-  sampleInput: '8',
-  sampleOutput: 'YES',
+declare global {
+  interface Window { MathJax?: { typesetPromise: (els: HTMLElement[]) => Promise<void> } }
 }
 
 export default function ProblemPage() {
-  const { oj, id } = useParams()
+  const { oj, contestId, index } = useParams()
+  const [searchParams] = useSearchParams()
+  const rating = searchParams.get('rating')
+
+  const [problem, setProblem] = useState<ProblemData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
   const [language, setLanguage] = useState('C++')
   const [code, setCode] = useState(DEFAULT_CODE['C++'])
   const [verdict, setVerdict] = useState<string | null>(null)
 
+  const statementRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!oj || !contestId || !index) return
+    setLoading(true)
+    setError(null)
+    fetch(`/api/problems/${oj}/${contestId}/${index}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        setProblem(data)
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [oj, contestId, index])
+
+  // Trigger MathJax after statement renders
+  useEffect(() => {
+    if (problem && statementRef.current && window.MathJax?.typesetPromise) {
+      window.MathJax.typesetPromise([statementRef.current])
+    }
+  }, [problem])
+
   const handleSubmit = async () => {
     setVerdict('Judging...')
-    // TODO: call backend /api/submit
-    setTimeout(() => setVerdict('Accepted'), 1500)
+    const res = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oj, problemId: `${contestId}${index}`, language, code }),
+    })
+    const data = await res.json()
+    setVerdict(data.message ?? 'Submitted')
   }
 
   return (
     <div className="problem-page">
       <div className="problem-panel">
-        <div className="problem-header">
-          <h2>{MOCK_PROBLEM.title}</h2>
-          <span className="oj-label">{MOCK_PROBLEM.oj}</span>
-        </div>
-        <div className="problem-meta">
-          <span>Time: {MOCK_PROBLEM.timeLimit}</span>
-          <span>Memory: {MOCK_PROBLEM.memoryLimit}</span>
-        </div>
-        <div className="problem-section">
-          <p>{MOCK_PROBLEM.statement}</p>
-        </div>
-        <div className="problem-section">
-          <h4>Input</h4>
-          <p>{MOCK_PROBLEM.inputSpec}</p>
-        </div>
-        <div className="problem-section">
-          <h4>Output</h4>
-          <p>{MOCK_PROBLEM.outputSpec}</p>
-        </div>
-        <div className="problem-section">
-          <h4>Sample Input</h4>
-          <pre className="sample-block">{MOCK_PROBLEM.sampleInput}</pre>
-        </div>
-        <div className="problem-section">
-          <h4>Sample Output</h4>
-          <pre className="sample-block">{MOCK_PROBLEM.sampleOutput}</pre>
-        </div>
+        {loading && <div className="loading">Loading problem...</div>}
+        {error && <div className="error-msg">{error}</div>}
+        {problem && (
+          <>
+            <div className="problem-header">
+              <h2>{problem.title}</h2>
+              <div className="problem-header-right">
+                {rating && <span className={`rating-badge r${Math.floor(parseInt(rating) / 500) * 500}`}>{rating}</span>}
+                <span className={`oj-badge oj-${oj}`}>{oj}</span>
+                <a href={problem.url} target="_blank" rel="noreferrer" className="cf-link">↗ CF</a>
+              </div>
+            </div>
+            <div className="problem-meta">
+              <span>⏱ {problem.timeLimit}</span>
+              <span>💾 {problem.memoryLimit}</span>
+            </div>
+            <div
+              ref={statementRef}
+              className="problem-statement-html"
+              dangerouslySetInnerHTML={{ __html: problem.statementHtml }}
+            />
+          </>
+        )}
       </div>
 
       <div className="editor-panel">
