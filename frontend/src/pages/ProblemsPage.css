@@ -1,0 +1,120 @@
+.problems-page h1 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.search-input {
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  width: 320px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.oj-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.oj-tab {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.oj-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.oj-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.problems-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.problems-table th {
+  text-align: left;
+  padding: 10px 14px;
+  color: var(--text-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.problem-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.problem-row:hover td {
+  background: var(--bg-hover);
+}
+
+.problem-row td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.problem-title {
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.problem-title:hover {
+  color: var(--accent-hover);
+}
+
+.difficulty {
+  color: var(--text-muted);
+}
+
+.oj-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.oj-codeforces { background: #1a2a4a; color: #60a5fa; }
+.oj-atcoder   { background: #1a3a2a; color: #4ade80; }
+.oj-luogu     { background: #2a1a4a; color: #a78bfa; }
+.oj-uva       { background: #3a2a1a; color: #fb923c; }
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 4px;
+  background: var(--bg-hover);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
