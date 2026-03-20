@@ -12,7 +12,7 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<ProblemsPage />} />
-          <Route path="/problem/:oj/:id" element={<ProblemPage />} />
+          <Route path="/problem/:oj/:contestId/:index" element={<ProblemPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
         </Routes>
       </main>
