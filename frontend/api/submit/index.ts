@@ -39,16 +39,26 @@ function mergeCookieMaps(...maps: Record<string, string>[]): Record<string, stri
 }
 
 async function extractCsrf(html: string): Promise<string> {
+  // Try inline JS first — most reliable on CF
+  const jsMatch = html.match(/Codeforces\.csrf\s*=\s*'([a-f0-9]+)'/)
+  if (jsMatch) return jsMatch[1]
+
   const root = parse(html)
-  // Try meta tag first
-  const meta = root.querySelector('meta[name="X-Csrf-Token"]')
-  if (meta) return meta.getAttribute('content') ?? ''
-  // Try hidden input
+  // Hidden input in form
   const input = root.querySelector('input[name="csrf_token"]')
-  if (input) return input.getAttribute('value') ?? ''
-  // Try inline JS: Codeforces.csrf = 'xxx'
-  const match = html.match(/Codeforces\.csrf\s*=\s*'([^']+)'/)
-  return match?.[1] ?? ''
+  if (input?.getAttribute('value')) return input.getAttribute('value')!
+  // Meta tag
+  const meta = root.querySelector('meta[name="X-Csrf-Token"]')
+  if (meta?.getAttribute('content')) return meta.getAttribute('content')!
+
+  return ''
+}
+
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'identity', // avoid gzip/br so we can read the HTML directly
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -78,14 +88,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // ── Step 1: Fetch login page → get CSRF token + initial cookies ──────────
     const loginPageRes = await fetch('https://codeforces.com/enter', {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
+      headers: BROWSER_HEADERS,
     })
     const loginPageHtml = await loginPageRes.text()
     const loginCsrf = await extractCsrf(loginPageHtml)
     let cookies = parseCookieHeaders(extractSetCookies(loginPageRes.headers))
 
     if (!loginCsrf) {
-      res.status(502).json({ error: 'Could not extract CSRF token from CF login page' })
+      const preview = loginPageHtml.slice(0, 300).replace(/\s+/g, ' ')
+      res.status(502).json({ error: `Could not extract CSRF token from CF login page. Page preview: ${preview}` })
       return
     }
 
@@ -102,8 +113,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const loginRes = await fetch('https://codeforces.com/enter', {
       method: 'POST',
       headers: {
+        ...BROWSER_HEADERS,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0',
         Cookie: serializeCookies(cookies),
         Referer: 'https://codeforces.com/enter',
       },
@@ -123,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const submitUrl = `https://codeforces.com/contest/${contestId}/submit`
     const submitPageRes = await fetch(submitUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0',
+        ...BROWSER_HEADERS,
         Cookie: serializeCookies(cookies),
       },
     })
@@ -150,8 +161,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const submitRes = await fetch(`${submitUrl}?csrf_token=${submitCsrf}`, {
       method: 'POST',
       headers: {
+        ...BROWSER_HEADERS,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0',
         Cookie: serializeCookies(cookies),
         Referer: submitUrl,
       },
