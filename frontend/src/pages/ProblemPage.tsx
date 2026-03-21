@@ -26,16 +26,16 @@ declare global {
 
 const CREDS_KEY = 'cf_credentials'
 
-function loadCreds(): { handle: string; password: string } {
+function loadCreds(): { handle: string; sessionCookie: string } {
   try {
     return JSON.parse(localStorage.getItem(CREDS_KEY) ?? '{}')
   } catch {
-    return { handle: '', password: '' }
+    return { handle: '', sessionCookie: '' }
   }
 }
 
-function saveCreds(handle: string, password: string) {
-  localStorage.setItem(CREDS_KEY, JSON.stringify({ handle, password }))
+function saveCreds(handle: string, sessionCookie: string) {
+  localStorage.setItem(CREDS_KEY, JSON.stringify({ handle, sessionCookie }))
 }
 
 function verdictClass(v: string): string {
@@ -86,7 +86,7 @@ export default function ProblemPage() {
   // Credentials
   const [creds, setCreds] = useState(loadCreds)
   const [showCredModal, setShowCredModal] = useState(false)
-  const [credInput, setCredInput] = useState({ handle: '', password: '' })
+  const [credInput, setCredInput] = useState({ handle: '', sessionCookie: '' })
 
   const statementRef = useRef<HTMLDivElement>(null)
 
@@ -136,8 +136,8 @@ export default function ProblemPage() {
   }, [creds.handle, contestId])
 
   const handleSubmit = async () => {
-    if (!creds.handle || !creds.password) {
-      setCredInput({ handle: creds.handle ?? '', password: '' })
+    if (!creds.handle || !creds.sessionCookie) {
+      setCredInput({ handle: creds.handle ?? '', sessionCookie: creds.sessionCookie ?? '' })
       setShowCredModal(true)
       return
     }
@@ -150,7 +150,7 @@ export default function ProblemPage() {
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oj, contestId, index, language, code, handle: creds.handle, password: creds.password }),
+        body: JSON.stringify({ oj, contestId, index, language, code, handle: creds.handle, sessionCookie: creds.sessionCookie }),
       })
       const data = await res.json()
 
@@ -181,8 +181,8 @@ export default function ProblemPage() {
   }
 
   const handleSaveCreds = () => {
-    saveCreds(credInput.handle, credInput.password)
-    setCreds({ handle: credInput.handle, password: credInput.password })
+    saveCreds(credInput.handle, credInput.sessionCookie)
+    setCreds({ handle: credInput.handle, sessionCookie: credInput.sessionCookie })
     setShowCredModal(false)
   }
 
@@ -193,7 +193,6 @@ export default function ProblemPage() {
         <div className="modal-overlay" onClick={() => setShowCredModal(false)}>
           <div className="cred-modal" onClick={e => e.stopPropagation()}>
             <h3>Codeforces Account</h3>
-            <p className="cred-hint">Credentials are stored locally and only sent to Codeforces for submission.</p>
             <label>Handle</label>
             <input
               className="cred-input"
@@ -202,15 +201,20 @@ export default function ProblemPage() {
               onChange={e => setCredInput(c => ({ ...c, handle: e.target.value }))}
               autoFocus
             />
-            <label>Password</label>
-            <input
-              className="cred-input"
-              type="password"
-              placeholder="password"
-              value={credInput.password}
-              onChange={e => setCredInput(c => ({ ...c, password: e.target.value }))}
-              onKeyDown={e => { if (e.key === 'Enter') handleSaveCreds() }}
+            <label>Session Cookie</label>
+            <textarea
+              className="cred-input cred-textarea"
+              placeholder="JSESSIONID=abc123; X-Csrf-Token=..."
+              value={credInput.sessionCookie}
+              onChange={e => setCredInput(c => ({ ...c, sessionCookie: e.target.value }))}
+              rows={3}
             />
+            <p className="cred-hint">
+              Log into <a href="https://codeforces.com" target="_blank" rel="noreferrer">codeforces.com</a> in your browser,
+              then open DevTools (F12) → Application → Cookies → codeforces.com.
+              Copy all cookie values as <code>name=value; name2=value2</code> and paste above.
+              Stored locally in your browser only.
+            </p>
             <div className="cred-modal-btns">
               <button className="cred-save-btn" onClick={handleSaveCreds}>Save & Submit</button>
               <button className="cred-cancel-btn" onClick={() => setShowCredModal(false)}>Cancel</button>
@@ -261,7 +265,7 @@ export default function ProblemPage() {
             <button
               className={`account-btn ${creds.handle ? 'logged-in' : ''}`}
               onClick={() => {
-                setCredInput({ handle: creds.handle ?? '', password: '' })
+                setCredInput({ handle: creds.handle ?? '', sessionCookie: creds.sessionCookie ?? '' })
                 setShowCredModal(true)
               }}
               title={creds.handle ? `Logged in as ${creds.handle}` : 'Set Codeforces account'}

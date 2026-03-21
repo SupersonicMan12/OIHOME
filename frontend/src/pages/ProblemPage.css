@@ -312,6 +312,23 @@
   border-color: var(--accent);
 }
 
+.cred-textarea {
+  resize: vertical;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.cred-hint a {
+  color: var(--accent);
+}
+
+.cred-hint code {
+  background: var(--bg-hover);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
 .cred-modal-btns {
   display: flex;
   gap: 8px;
