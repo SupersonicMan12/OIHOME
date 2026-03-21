@@ -199,9 +199,10 @@ export default function ProblemPage() {
   }, [showModal, doSubmit])
 
   const handleSubmit = () => {
-    if (!creds.handle || !creds.sessionCookie) {
+    if (!creds.handle || !creds.sessionCookie || !creds.csrfToken) {
       setWizardHandle(creds.handle ?? '')
-      setWizardStep(creds.handle ? 2 : 1)
+      // If handle+cookie exist but csrfToken missing, jump straight to step 3 to re-run bookmarklet
+      setWizardStep(!creds.handle ? 1 : !creds.sessionCookie ? 2 : 3)
       setShowModal(true)
       return
     }
@@ -398,7 +399,7 @@ export default function ProblemPage() {
           </select>
           <div className="toolbar-right">
             <button
-              className={`account-btn ${creds.handle && creds.sessionCookie ? 'logged-in' : ''}`}
+              className={`account-btn ${creds.handle && creds.sessionCookie && creds.csrfToken ? 'logged-in' : ''}`}
               onClick={() => {
                 setWizardHandle(creds.handle ?? '')
                 setWizardStep(creds.handle ? (creds.sessionCookie ? 3 : 2) : 1)
@@ -406,7 +407,7 @@ export default function ProblemPage() {
               }}
               title={creds.handle ? `Connected as ${creds.handle} — click to reconnect` : 'Connect Codeforces account'}
             >
-              {creds.handle && creds.sessionCookie ? `⚡ ${creds.handle}` : '⚙ Connect CF'}
+              {creds.handle && creds.sessionCookie && creds.csrfToken ? `⚡ ${creds.handle}` : '⚙ Connect CF'}
             </button>
             <button className="submit-btn" onClick={handleSubmit} disabled={submitting}>
               {submitting ? 'Submitting…' : 'Submit'}
