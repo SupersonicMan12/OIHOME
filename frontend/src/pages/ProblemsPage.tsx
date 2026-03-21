@@ -16,6 +16,8 @@ interface Problem {
   tags: string[]
   solvedCount: number
   url: string
+  contestName: string | null
+  date: number | null
 }
 
 export default function ProblemsPage() {
@@ -105,6 +107,7 @@ export default function ProblemsPage() {
                 <th>Title</th>
                 <th>Difficulty</th>
                 <th>Solved</th>
+                <th>Source / Date</th>
                 <th>Tags</th>
               </tr>
             </thead>
@@ -123,6 +126,11 @@ export default function ProblemsPage() {
                       : '—'}
                   </td>
                   <td className="solved-count">{p.solvedCount.toLocaleString()}</td>
+                  <td className="source-date">
+                    {p.contestName && <span className="contest-name">{p.contestName}</span>}
+                    {p.date && <span className="contest-date">{new Date(p.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}
+                    {!p.contestName && !p.date && '—'}
+                  </td>
                   <td>{p.tags.slice(0, 3).map(t => <span key={t} className="tag">{t}</span>)}</td>
                 </tr>
               ))}

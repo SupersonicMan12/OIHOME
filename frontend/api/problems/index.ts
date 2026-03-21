@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const CF_API = 'https://codeforces.com/api/problemset.problems'
+const CF_CONTEST_API = 'https://codeforces.com/api/contest.list?gym=false'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { oj = 'codeforces', page = '1', limit = '50', tag, search } = req.query
@@ -11,30 +12,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const cfRes = await fetch(CF_API)
-    const data = await cfRes.json() as CFResponse
+    const [cfRes, contestRes] = await Promise.all([
+      fetch(CF_API),
+      fetch(CF_CONTEST_API),
+    ])
+    const [data, contestData] = await Promise.all([
+      cfRes.json() as Promise<CFResponse>,
+      contestRes.json() as Promise<CFContestListResponse>,
+    ])
 
     if (data.status !== 'OK') {
       res.status(502).json({ error: 'Codeforces API error' })
       return
     }
 
+    const contestMap = new Map<number, { name: string; startTimeSeconds: number }>()
+    if (contestData.status === 'OK') {
+      for (const c of contestData.result) {
+        contestMap.set(c.id, { name: c.name, startTimeSeconds: c.startTimeSeconds })
+      }
+    }
+
     const statsMap = new Map(
       data.result.problemStatistics.map(s => [`${s.contestId}-${s.index}`, s.solvedCount])
     )
 
-    let problems = data.result.problems.map(p => ({
-      id: `${p.contestId}${p.index}`,
-      contestId: p.contestId,
-      index: p.index,
-      oj: 'codeforces',
-      ojLabel: 'Codeforces',
-      title: p.name,
-      difficulty: p.rating ?? null,
-      tags: p.tags,
-      solvedCount: statsMap.get(`${p.contestId}-${p.index}`) ?? 0,
-      url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`,
-    }))
+    let problems = data.result.problems.map(p => {
+      const contest = contestMap.get(p.contestId)
+      return {
+        id: `${p.contestId}${p.index}`,
+        contestId: p.contestId,
+        index: p.index,
+        oj: 'codeforces',
+        ojLabel: 'Codeforces',
+        title: p.name,
+        difficulty: p.rating ?? null,
+        tags: p.tags,
+        solvedCount: statsMap.get(`${p.contestId}-${p.index}`) ?? 0,
+        url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`,
+        contestName: contest?.name ?? null,
+        date: contest?.startTimeSeconds ? contest.startTimeSeconds * 1000 : null,
+      }
+    })
 
     // filter by tag
     if (tag && typeof tag === 'string') {
@@ -80,4 +99,15 @@ interface CFResponse {
     problems: CFProblem[]
     problemStatistics: CFStat[]
   }
+}
+
+interface CFContest {
+  id: number
+  name: string
+  startTimeSeconds: number
+}
+
+interface CFContestListResponse {
+  status: string
+  result: CFContest[]
 }
