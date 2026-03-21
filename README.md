@@ -2,6 +2,8 @@
 
 Competitive programming aggregator — browse, solve, and track problems from Codeforces, Luogu, AtCoder, UVA, and more, all in one place.
 
+Created with ClaudeCode
+
 see https://oihome.vercel.app/
 
 ## Development
