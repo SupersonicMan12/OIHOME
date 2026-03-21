@@ -7,7 +7,9 @@
       "Bash(rm -f \"/Users/hanszhu/Desktop/OIHOME/frontend/api/problems/[oj]/[id].ts\")",
       "WebFetch(domain:www.cnblogs.com)",
       "WebFetch(domain:blog.csdn.net)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:codeforces.com)"
     ]
   }
 }

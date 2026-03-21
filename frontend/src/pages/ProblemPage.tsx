@@ -4,6 +4,10 @@ import Editor from '@monaco-editor/react'
 import './ProblemPage.css'
 
 const LANGUAGES = ['C++', 'Python', 'Java', 'JavaScript']
+const CREDS_KEY = 'cf_credentials'
+
+const BOOKMARKLET_HREF =
+  "javascript:(function(){var w=400,h=300,l=Math.round(screen.width/2-w/2),t=Math.round(screen.height/2-h/2);window.open('https://oihome.vercel.app/auth/cf#'+encodeURIComponent(document.cookie),'_blank','width='+w+',height='+h+',left='+l+',top='+t+',toolbar=0,menubar=0,scrollbars=0');})();"
 
 interface ProblemData {
   title: string
@@ -20,50 +24,47 @@ interface VerdictData {
   memoryConsumedBytes?: number
 }
 
+interface Creds {
+  handle: string
+  sessionCookie: string
+}
+
 declare global {
   interface Window { MathJax?: { typesetPromise: (els: HTMLElement[]) => Promise<void> } }
 }
 
-const CREDS_KEY = 'cf_credentials'
-
-function loadCreds(): { handle: string; sessionCookie: string } {
-  try {
-    return JSON.parse(localStorage.getItem(CREDS_KEY) ?? '{}')
-  } catch {
-    return { handle: '', sessionCookie: '' }
-  }
+function loadCreds(): Creds {
+  try { return JSON.parse(localStorage.getItem(CREDS_KEY) ?? '{}') }
+  catch { return { handle: '', sessionCookie: '' } }
 }
 
 function saveCreds(handle: string, sessionCookie: string) {
   localStorage.setItem(CREDS_KEY, JSON.stringify({ handle, sessionCookie }))
 }
 
-function verdictClass(v: string): string {
+function verdictClass(v: string) {
   if (v === 'OK') return 'ac'
   if (v === 'TESTING' || v === 'SUBMITTING') return 'judging'
   if (v === 'WRONG_ANSWER') return 'wa'
-  if (v === 'TIME_LIMIT_EXCEEDED') return 'tle'
-  if (v === 'MEMORY_LIMIT_EXCEEDED') return 'mle'
+  if (v === 'TIME_LIMIT_EXCEEDED' || v === 'MEMORY_LIMIT_EXCEEDED') return 'tle'
   if (v === 'RUNTIME_ERROR') return 're'
   if (v === 'COMPILATION_ERROR') return 'ce'
   return 'wa'
 }
 
-function verdictLabel(v: string): string {
-  const map: Record<string, string> = {
+function verdictLabel(v: string) {
+  return ({
     OK: 'Accepted',
     WRONG_ANSWER: 'Wrong Answer',
     TIME_LIMIT_EXCEEDED: 'Time Limit Exceeded',
     MEMORY_LIMIT_EXCEEDED: 'Memory Limit Exceeded',
     RUNTIME_ERROR: 'Runtime Error',
     COMPILATION_ERROR: 'Compilation Error',
-    TESTING: 'Judging...',
-    SUBMITTING: 'Submitting...',
+    TESTING: 'Judging…',
+    SUBMITTING: 'Submitting…',
     FAILED: 'Failed',
     PARTIAL: 'Partial',
-    IDLENESS_LIMIT_EXCEEDED: 'Idleness Limit Exceeded',
-  }
-  return map[v] ?? v
+  } as Record<string, string>)[v] ?? v
 }
 
 export default function ProblemPage() {
@@ -83,42 +84,45 @@ export default function ProblemPage() {
   const [verdictData, setVerdictData] = useState<VerdictData | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Credentials
-  const [creds, setCreds] = useState(loadCreds)
-  const [showCredModal, setShowCredModal] = useState(false)
-  const [credInput, setCredInput] = useState({ handle: '', sessionCookie: '' })
+  const [creds, setCreds] = useState<Creds>(loadCreds)
+
+  // Wizard state
+  const [showModal, setShowModal] = useState(false)
+  const [wizardStep, setWizardStep] = useState(1)
+  const [wizardHandle, setWizardHandle] = useState('')
+  const [wizardConnected, setWizardConnected] = useState(false)
+  const cfPopupRef = useRef<Window | null>(null)
 
   const statementRef = useRef<HTMLDivElement>(null)
 
+  // Load problem
   useEffect(() => {
     if (!oj || !contestId || !index) return
     setLoading(true)
     setError(null)
     fetch(`/api/problems/${oj}/${contestId}/${index}`)
       .then(r => r.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error)
-        setProblem(data)
-      })
+      .then(d => { if (d.error) throw new Error(d.error); setProblem(d) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [oj, contestId, index])
 
+  // MathJax
   useEffect(() => {
     if (problem && statementRef.current && window.MathJax?.typesetPromise) {
       window.MathJax.typesetPromise([statementRef.current])
     }
   }, [problem])
 
-  // Clear polling on unmount
+  // Cleanup polling
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
-  const pollVerdict = useCallback((submissionId: number) => {
+  const pollVerdict = useCallback((submissionId: number, handle: string) => {
     if (pollRef.current) clearInterval(pollRef.current)
     pollRef.current = setInterval(async () => {
       try {
         const res = await fetch(
-          `/api/submit/${submissionId}?handle=${encodeURIComponent(creds.handle)}&contestId=${contestId}`
+          `/api/submit/${submissionId}?handle=${encodeURIComponent(handle)}&contestId=${contestId}`
         )
         const data: VerdictData = await res.json()
         setVerdictData(data)
@@ -133,43 +137,33 @@ export default function ProblemPage() {
         setSubmitting(false)
       }
     }, 2000)
-  }, [creds.handle, contestId])
+  }, [contestId])
 
-  const handleSubmit = async () => {
-    if (!creds.handle || !creds.sessionCookie) {
-      setCredInput({ handle: creds.handle ?? '', sessionCookie: creds.sessionCookie ?? '' })
-      setShowCredModal(true)
-      return
-    }
-
+  const doSubmit = useCallback(async (handle: string, sessionCookie: string) => {
     setSubmitting(true)
     setSubmitError(null)
     setVerdictData({ verdict: 'SUBMITTING' })
-
     try {
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oj, contestId, index, language, code, handle: creds.handle, sessionCookie: creds.sessionCookie }),
+        body: JSON.stringify({ oj, contestId, index, language, code, handle, sessionCookie }),
       })
       const data = await res.json()
-
       if (!res.ok || data.error) {
         setSubmitError(data.error ?? 'Submission failed')
         setVerdictData(null)
         setSubmitting(false)
         return
       }
-
       if (!data.submissionId) {
         setVerdictData({ verdict: 'TESTING' })
         setSubmitting(false)
         return
       }
-
       setVerdictData({ verdict: data.verdict ?? 'TESTING' })
-      if (data.verdict === 'TESTING' || !data.verdict) {
-        pollVerdict(data.submissionId)
+      if (!data.verdict || data.verdict === 'TESTING') {
+        pollVerdict(data.submissionId, handle)
       } else {
         setSubmitting(false)
       }
@@ -178,53 +172,194 @@ export default function ProblemPage() {
       setVerdictData(null)
       setSubmitting(false)
     }
+  }, [oj, contestId, index, language, code, pollVerdict])
+
+  // Listen for auth callback writing sessionCookie from bookmarklet popup
+  useEffect(() => {
+    if (!showModal) return
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== CREDS_KEY) return
+      const updated = loadCreds()
+      if (!updated.sessionCookie) return
+      try { cfPopupRef.current?.close() } catch {}
+      setCreds(updated)
+      setWizardConnected(true)
+      setTimeout(() => {
+        setShowModal(false)
+        setWizardConnected(false)
+        setWizardStep(1)
+        const fresh = loadCreds()
+        doSubmit(fresh.handle, fresh.sessionCookie)
+      }, 1500)
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [showModal, doSubmit])
+
+  const handleSubmit = () => {
+    if (!creds.handle || !creds.sessionCookie) {
+      setWizardHandle(creds.handle ?? '')
+      setWizardStep(creds.handle ? 2 : 1)
+      setShowModal(true)
+      return
+    }
+    doSubmit(creds.handle, creds.sessionCookie)
   }
 
-  const handleSaveCreds = () => {
-    saveCreds(credInput.handle, credInput.sessionCookie)
-    setCreds({ handle: credInput.handle, sessionCookie: credInput.sessionCookie })
-    setShowCredModal(false)
-  }
+  const closeModal = () => { setShowModal(false); setWizardStep(1) }
 
   return (
     <div className="problem-page">
-      {/* Credentials modal */}
-      {showCredModal && (
-        <div className="modal-overlay" onClick={() => setShowCredModal(false)}>
+
+      {/* ── Auth Wizard Modal ─────────────────────────────────────────────── */}
+      {showModal && (
+        <div className="modal-overlay" onClick={closeModal}>
           <div className="cred-modal" onClick={e => e.stopPropagation()}>
-            <h3>Codeforces Account</h3>
-            <label>Handle</label>
-            <input
-              className="cred-input"
-              placeholder="your_handle"
-              value={credInput.handle}
-              onChange={e => setCredInput(c => ({ ...c, handle: e.target.value }))}
-              autoFocus
-            />
-            <label>Session Cookie</label>
-            <textarea
-              className="cred-input cred-textarea"
-              placeholder="JSESSIONID=abc123; X-Csrf-Token=..."
-              value={credInput.sessionCookie}
-              onChange={e => setCredInput(c => ({ ...c, sessionCookie: e.target.value }))}
-              rows={3}
-            />
-            <p className="cred-hint">
-              Log into <a href="https://codeforces.com" target="_blank" rel="noreferrer">codeforces.com</a> in your browser,
-              then open DevTools (F12) → Application → Cookies → codeforces.com.
-              Copy all cookie values as <code>name=value; name2=value2</code> and paste above.
-              Stored locally in your browser only.
-            </p>
-            <div className="cred-modal-btns">
-              <button className="cred-save-btn" onClick={handleSaveCreds}>Save & Submit</button>
-              <button className="cred-cancel-btn" onClick={() => setShowCredModal(false)}>Cancel</button>
-            </div>
+
+            {wizardConnected ? (
+              <div className="wizard-success">
+                <div className="wizard-check">✓</div>
+                <p className="wizard-success-title">Connected as {creds.handle}</p>
+                <p className="wizard-success-sub">Submitting your code…</p>
+              </div>
+            ) : (
+              <>
+                <div className="wizard-header">
+                  <h3>Connect Codeforces</h3>
+                  <div className="wizard-step-dots">
+                    {[1, 2, 3].map(n => (
+                      <div key={n} className={`wizard-dot ${wizardStep >= n ? 'active' : ''}`} />
+                    ))}
+                  </div>
+                  <button className="wizard-close" onClick={closeModal}>✕</button>
+                </div>
+
+                {/* Step 1: Handle */}
+                {wizardStep === 1 && (
+                  <div className="wizard-body">
+                    <p className="wizard-step-label">Step 1 of 3 — Your Codeforces handle</p>
+                    <input
+                      className="cred-input"
+                      placeholder="e.g. tourist"
+                      value={wizardHandle}
+                      autoFocus
+                      onChange={e => setWizardHandle(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && wizardHandle.trim()) {
+                          const h = wizardHandle.trim()
+                          saveCreds(h, loadCreds().sessionCookie ?? '')
+                          setCreds(c => ({ ...c, handle: h }))
+                          setWizardStep(2)
+                        }
+                      }}
+                    />
+                    <button
+                      className="cred-save-btn"
+                      disabled={!wizardHandle.trim()}
+                      onClick={() => {
+                        const h = wizardHandle.trim()
+                        saveCreds(h, loadCreds().sessionCookie ?? '')
+                        setCreds(c => ({ ...c, handle: h }))
+                        setWizardStep(2)
+                      }}
+                    >Next →</button>
+                  </div>
+                )}
+
+                {/* Step 2: Bookmarklet */}
+                {wizardStep === 2 && (
+                  <div className="wizard-body">
+                    <p className="wizard-step-label">Step 2 of 3 — Add the bookmarklet</p>
+                    <p className="wizard-hint">
+                      Drag the button below to your bookmarks bar.
+                      {' '}(Show it with <kbd>Ctrl+Shift+B</kbd> / <kbd>⌘+Shift+B</kbd>)
+                    </p>
+                    <div className="wizard-bm-row">
+                      {/* eslint-disable-next-line react/jsx-no-target-blank */}
+                      <a
+                        className="bm-drag-btn"
+                        href={BOOKMARKLET_HREF}
+                        onClick={e => e.preventDefault()}
+                        draggable
+                      >
+                        ⚡ Connect OIHOME
+                      </a>
+                      <span className="wizard-hint">← drag to bookmarks bar</span>
+                    </div>
+                    <button className="cred-save-btn" onClick={() => setWizardStep(3)}>
+                      Done, next →
+                    </button>
+                    <button className="wizard-back" onClick={() => setWizardStep(1)}>← Back</button>
+                  </div>
+                )}
+
+                {/* Step 3: Open CF and click bookmarklet */}
+                {wizardStep === 3 && (
+                  <div className="wizard-body">
+                    <p className="wizard-step-label">Step 3 of 3 — Authorize</p>
+                    <p className="wizard-hint">
+                      Click below to open Codeforces. Once it loads, click the{' '}
+                      <strong>⚡ Connect OIHOME</strong> bookmarklet.
+                      The window will close and your code will submit automatically.
+                    </p>
+                    <button
+                      className="cred-save-btn"
+                      onClick={() => {
+                        const w = 520, h = 420
+                        const l = Math.round(screen.width / 2 - w / 2)
+                        const t = Math.round(screen.height / 2 - h / 2)
+                        cfPopupRef.current = window.open(
+                          'https://codeforces.com',
+                          'cf_auth',
+                          `width=${w},height=${h},left=${l},top=${t},toolbar=0,menubar=0,scrollbars=1`
+                        )
+                      }}
+                    >
+                      Open Codeforces ↗
+                    </button>
+                    <p className="wizard-waiting">
+                      Waiting for connection<span className="wizard-dots-anim" />
+                    </p>
+                    <button className="wizard-back" onClick={() => setWizardStep(2)}>← Back</button>
+
+                    <details className="wizard-manual">
+                      <summary>Trouble with the bookmarklet? Paste cookies manually</summary>
+                      <p className="wizard-hint" style={{ marginTop: 8 }}>
+                        On <a href="https://codeforces.com" target="_blank" rel="noreferrer">codeforces.com</a>,
+                        open DevTools → Application → Cookies → codeforces.com.
+                        Copy all as <code>name=value; name2=value2</code> and paste below.
+                      </p>
+                      <textarea
+                        className="cred-input cred-textarea"
+                        placeholder="JSESSIONID=abc123; X-Csrf-Token=..."
+                        rows={3}
+                        onChange={e => {
+                          const cookie = e.target.value.trim()
+                          if (!cookie) return
+                          saveCreds(loadCreds().handle ?? '', cookie)
+                          setCreds(c => ({ ...c, sessionCookie: cookie }))
+                          setWizardConnected(true)
+                          setTimeout(() => {
+                            setShowModal(false)
+                            setWizardConnected(false)
+                            setWizardStep(1)
+                            const fresh = loadCreds()
+                            doSubmit(fresh.handle, fresh.sessionCookie)
+                          }, 1500)
+                        }}
+                      />
+                    </details>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
 
+      {/* ── Problem panel ────────────────────────────────────────────────── */}
       <div className="problem-panel">
-        {loading && <div className="loading">Loading problem...</div>}
+        {loading && <div className="loading">Loading problem…</div>}
         {error && <div className="error-msg">{error}</div>}
         {problem && (
           <>
@@ -249,47 +384,43 @@ export default function ProblemPage() {
         )}
       </div>
 
+      {/* ── Editor panel ─────────────────────────────────────────────────── */}
       <div className="editor-panel">
         <div className="editor-toolbar">
           <select
             className="lang-select"
             value={language}
-            onChange={e => {
-              setLanguage(e.target.value)
-              setCode(DEFAULT_CODE[e.target.value] ?? '')
-            }}
+            onChange={e => { setLanguage(e.target.value); setCode(DEFAULT_CODE[e.target.value] ?? '') }}
           >
             {LANGUAGES.map(l => <option key={l}>{l}</option>)}
           </select>
           <div className="toolbar-right">
             <button
-              className={`account-btn ${creds.handle ? 'logged-in' : ''}`}
+              className={`account-btn ${creds.handle && creds.sessionCookie ? 'logged-in' : ''}`}
               onClick={() => {
-                setCredInput({ handle: creds.handle ?? '', sessionCookie: creds.sessionCookie ?? '' })
-                setShowCredModal(true)
+                setWizardHandle(creds.handle ?? '')
+                setWizardStep(creds.handle ? (creds.sessionCookie ? 3 : 2) : 1)
+                setShowModal(true)
               }}
-              title={creds.handle ? `Logged in as ${creds.handle}` : 'Set Codeforces account'}
+              title={creds.handle ? `Connected as ${creds.handle} — click to reconnect` : 'Connect Codeforces account'}
             >
-              {creds.handle ? `⚡ ${creds.handle}` : '⚙ CF Account'}
+              {creds.handle && creds.sessionCookie ? `⚡ ${creds.handle}` : '⚙ Connect CF'}
             </button>
             <button className="submit-btn" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? 'Submitting...' : 'Submit'}
+              {submitting ? 'Submitting…' : 'Submit'}
             </button>
           </div>
         </div>
+
         <Editor
           height="calc(100vh - 200px)"
           language={LANG_MAP[language]}
           value={code}
           onChange={v => setCode(v ?? '')}
           theme="vs-dark"
-          options={{
-            fontSize: 14,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            lineNumbers: 'on',
-          }}
+          options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, lineNumbers: 'on' }}
         />
+
         {submitError && <div className="submit-error">{submitError}</div>}
         {verdictData && (
           <div className={`verdict ${verdictClass(verdictData.verdict)}`}>
@@ -310,10 +441,7 @@ export default function ProblemPage() {
 }
 
 const LANG_MAP: Record<string, string> = {
-  'C++': 'cpp',
-  'Python': 'python',
-  'Java': 'java',
-  'JavaScript': 'javascript',
+  'C++': 'cpp', 'Python': 'python', 'Java': 'java', 'JavaScript': 'javascript',
 }
 
 const DEFAULT_CODE: Record<string, string> = {
