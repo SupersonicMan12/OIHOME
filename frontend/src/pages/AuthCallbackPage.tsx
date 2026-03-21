@@ -7,19 +7,33 @@ export default function AuthCallbackPage() {
   const [handle, setHandle] = useState('')
 
   useEffect(() => {
+    // Hash format: #c=<encodeURIComponent(cookies)>&csrf=<encodeURIComponent(csrfToken)>
     const raw = location.hash.slice(1)
     if (!raw) { setStatus('error'); return }
 
-    let cookieStr: string
-    try { cookieStr = decodeURIComponent(raw) } catch { setStatus('error'); return }
+    // Use URLSearchParams to parse — values were encodeURIComponent'd by the bookmarklet
+    const params = new URLSearchParams(raw)
+    const cookieStr = params.get('c') ?? ''
+    const csrfToken = params.get('csrf') ?? ''
+
     if (!cookieStr) { setStatus('error'); return }
 
     const existing = JSON.parse(localStorage.getItem(CREDS_KEY) ?? '{}')
-    localStorage.setItem(CREDS_KEY, JSON.stringify({ ...existing, sessionCookie: cookieStr }))
+    localStorage.setItem(CREDS_KEY, JSON.stringify({
+      ...existing,
+      sessionCookie: cookieStr,
+      csrfToken,
+    }))
+
     setHandle(existing.handle ?? '')
     setStatus('ok')
 
-    if (window.opener) setTimeout(() => window.close(), 1500)
+    // Notify opener via postMessage — more reliable than storage event
+    // (storage event doesn't fire if value didn't change, e.g. on reconnect)
+    if (window.opener) {
+      window.opener.postMessage({ type: 'cf_auth_success' }, window.location.origin)
+      setTimeout(() => window.close(), 1500)
+    }
   }, [])
 
   return (

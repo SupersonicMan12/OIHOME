@@ -6,8 +6,9 @@ import './ProblemPage.css'
 const LANGUAGES = ['C++', 'Python', 'Java', 'JavaScript']
 const CREDS_KEY = 'cf_credentials'
 
+// Extracts cookies + Codeforces.csrf from the CF page and sends both to /auth/cf
 const BOOKMARKLET_HREF =
-  "javascript:(function(){var w=400,h=300,l=Math.round(screen.width/2-w/2),t=Math.round(screen.height/2-h/2);window.open('https://oihome.vercel.app/auth/cf#'+encodeURIComponent(document.cookie),'_blank','width='+w+',height='+h+',left='+l+',top='+t+',toolbar=0,menubar=0,scrollbars=0');})();"
+  "javascript:(function(){var csrf='';try{csrf=Codeforces.csrf||'';}catch(e){}var w=400,h=300,l=Math.round(screen.width/2-w/2),t=Math.round(screen.height/2-h/2);window.open('https://oihome.vercel.app/auth/cf#c='+encodeURIComponent(document.cookie)+'&csrf='+encodeURIComponent(csrf),'_blank','width='+w+',height='+h+',left='+l+',top='+t+',toolbar=0,menubar=0,scrollbars=0');})();"
 
 interface ProblemData {
   title: string
@@ -27,6 +28,7 @@ interface VerdictData {
 interface Creds {
   handle: string
   sessionCookie: string
+  csrfToken: string
 }
 
 declare global {
@@ -35,11 +37,11 @@ declare global {
 
 function loadCreds(): Creds {
   try { return JSON.parse(localStorage.getItem(CREDS_KEY) ?? '{}') }
-  catch { return { handle: '', sessionCookie: '' } }
+  catch { return { handle: '', sessionCookie: '', csrfToken: '' } }
 }
 
-function saveCreds(handle: string, sessionCookie: string) {
-  localStorage.setItem(CREDS_KEY, JSON.stringify({ handle, sessionCookie }))
+function saveCreds(handle: string, sessionCookie: string, csrfToken = '') {
+  localStorage.setItem(CREDS_KEY, JSON.stringify({ handle, sessionCookie, csrfToken }))
 }
 
 function verdictClass(v: string) {
@@ -139,7 +141,7 @@ export default function ProblemPage() {
     }, 2000)
   }, [contestId])
 
-  const doSubmit = useCallback(async (handle: string, sessionCookie: string) => {
+  const doSubmit = useCallback(async (handle: string, sessionCookie: string, csrfToken: string) => {
     setSubmitting(true)
     setSubmitError(null)
     setVerdictData({ verdict: 'SUBMITTING' })
@@ -147,7 +149,7 @@ export default function ProblemPage() {
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oj, contestId, index, language, code, handle, sessionCookie }),
+        body: JSON.stringify({ oj, contestId, index, language, code, handle, sessionCookie, csrfToken }),
       })
       const data = await res.json()
       if (!res.ok || data.error) {
@@ -174,26 +176,26 @@ export default function ProblemPage() {
     }
   }, [oj, contestId, index, language, code, pollVerdict])
 
-  // Listen for auth callback writing sessionCookie from bookmarklet popup
+  // Listen for auth callback posting back via postMessage (works on reconnect too)
   useEffect(() => {
     if (!showModal) return
-    const onStorage = (e: StorageEvent) => {
-      if (e.key !== CREDS_KEY) return
-      const updated = loadCreds()
-      if (!updated.sessionCookie) return
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return
+      if (e.data?.type !== 'cf_auth_success') return
       try { cfPopupRef.current?.close() } catch {}
-      setCreds(updated)
+      const fresh = loadCreds()
+      setCreds(fresh)
       setWizardConnected(true)
       setTimeout(() => {
         setShowModal(false)
         setWizardConnected(false)
         setWizardStep(1)
-        const fresh = loadCreds()
-        doSubmit(fresh.handle, fresh.sessionCookie)
+        const c = loadCreds()
+        doSubmit(c.handle, c.sessionCookie, c.csrfToken)
       }, 1500)
     }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
   }, [showModal, doSubmit])
 
   const handleSubmit = () => {
@@ -203,7 +205,7 @@ export default function ProblemPage() {
       setShowModal(true)
       return
     }
-    doSubmit(creds.handle, creds.sessionCookie)
+    doSubmit(creds.handle, creds.sessionCookie, creds.csrfToken)
   }
 
   const closeModal = () => { setShowModal(false); setWizardStep(1) }
@@ -247,7 +249,7 @@ export default function ProblemPage() {
                       onKeyDown={e => {
                         if (e.key === 'Enter' && wizardHandle.trim()) {
                           const h = wizardHandle.trim()
-                          saveCreds(h, loadCreds().sessionCookie ?? '')
+                          saveCreds(h, loadCreds().sessionCookie ?? '', loadCreds().csrfToken ?? '')
                           setCreds(c => ({ ...c, handle: h }))
                           setWizardStep(2)
                         }
@@ -258,7 +260,7 @@ export default function ProblemPage() {
                       disabled={!wizardHandle.trim()}
                       onClick={() => {
                         const h = wizardHandle.trim()
-                        saveCreds(h, loadCreds().sessionCookie ?? '')
+                        saveCreds(h, loadCreds().sessionCookie ?? '', loadCreds().csrfToken ?? '')
                         setCreds(c => ({ ...c, handle: h }))
                         setWizardStep(2)
                       }}
@@ -336,7 +338,7 @@ export default function ProblemPage() {
                         onChange={e => {
                           const cookie = e.target.value.trim()
                           if (!cookie) return
-                          saveCreds(loadCreds().handle ?? '', cookie)
+                          saveCreds(loadCreds().handle ?? '', cookie, loadCreds().csrfToken ?? '')
                           setCreds(c => ({ ...c, sessionCookie: cookie }))
                           setWizardConnected(true)
                           setTimeout(() => {
@@ -344,7 +346,7 @@ export default function ProblemPage() {
                             setWizardConnected(false)
                             setWizardStep(1)
                             const fresh = loadCreds()
-                            doSubmit(fresh.handle, fresh.sessionCookie)
+                            doSubmit(fresh.handle, fresh.sessionCookie, fresh.csrfToken)
                           }, 1500)
                         }}
                       />

@@ -38,9 +38,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const { oj, contestId, index, language, code, handle, sessionCookie } = req.body
+  const { oj, contestId, index, language, code, handle, sessionCookie, csrfToken } = req.body
 
-  const missing = ['contestId', 'index', 'language', 'code', 'handle', 'sessionCookie']
+  const missing = ['contestId', 'index', 'language', 'code', 'handle', 'sessionCookie', 'csrfToken']
     .filter(f => !(req.body as any)[f])
   if (missing.length) {
     res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` })
@@ -61,16 +61,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const submitUrl = `https://codeforces.com/contest/${contestId}/submit`
     const cookies = parseRawCookieString(sessionCookie)
-
-    // The CSRF token is stored directly in the cookies as X-Csrf-Token —
-    // no need to fetch the submit page (which Cloudflare blocks from server IPs).
-    const submitCsrf = cookies['X-Csrf-Token'] ?? cookies['x-csrf-token'] ?? ''
-    if (!submitCsrf) {
-      res.status(401).json({
-        error: 'Could not find X-Csrf-Token in your session cookies. Try reconnecting your CF account.',
-      })
-      return
-    }
+    // csrfToken is extracted from Codeforces.csrf by the bookmarklet at auth time
+    const submitCsrf = csrfToken
 
     // ── Step 2: POST submission ───────────────────────────────────────────────
     const submitBody = new URLSearchParams({

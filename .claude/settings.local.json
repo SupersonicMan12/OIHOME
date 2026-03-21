@@ -9,7 +9,9 @@
       "WebFetch(domain:blog.csdn.net)",
       "Bash(git pull:*)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:codeforces.com)"
+      "WebFetch(domain:codeforces.com)",
+      "Bash(sed -i '' \"341s/saveCreds\\(loadCreds\\(\\).handle ?? '''', cookie\\)/saveCreds\\(loadCreds\\(\\).handle ?? '''', cookie, loadCreds\\(\\).csrfToken ?? ''''\\)/\" /Users/hanszhu/Desktop/OIHOME/frontend/src/pages/ProblemPage.tsx)",
+      "Bash(sed -i '' \"349s/doSubmit\\(fresh.handle, fresh.sessionCookie\\)/doSubmit\\(fresh.handle, fresh.sessionCookie, fresh.csrfToken\\)/\" /Users/hanszhu/Desktop/OIHOME/frontend/src/pages/ProblemPage.tsx)"
     ]
   }
 }
