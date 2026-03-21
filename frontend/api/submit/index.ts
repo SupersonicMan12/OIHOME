@@ -79,8 +79,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { oj, contestId, index, language, code, handle, sessionCookie } = req.body
 
-  if (!contestId || !index || !language || !code || !handle || !sessionCookie) {
-    res.status(400).json({ error: 'Missing required fields' })
+  const missing = ['contestId', 'index', 'language', 'code', 'handle', 'sessionCookie']
+    .filter(f => !(req.body as any)[f])
+  if (missing.length) {
+    res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` })
     return
   }
 
