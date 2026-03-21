@@ -20,6 +20,16 @@ interface Problem {
   date: number | null
 }
 
+function luoguTier(rating: number): string {
+  if (rating < 1000) return 'lg-beginner'
+  if (rating < 1200) return 'lg-basic-minus'
+  if (rating < 1600) return 'lg-basic'
+  if (rating < 2000) return 'lg-advanced'
+  if (rating < 2400) return 'lg-advanced-plus'
+  if (rating < 3000) return 'lg-provincial'
+  return 'lg-noi'
+}
+
 export default function ProblemsPage() {
   const [ojFilter, setOjFilter] = useState('Codeforces')
   const [search, setSearch] = useState('')
@@ -122,7 +132,7 @@ export default function ProblemsPage() {
                   <td className="problem-title">{p.title}</td>
                   <td className="difficulty">
                     {p.difficulty
-                      ? <span className={`rating r${Math.floor(p.difficulty / 500) * 500}`}>{p.difficulty}</span>
+                      ? <span className={`rating ${luoguTier(p.difficulty)}`}>{p.difficulty}</span>
                       : '—'}
                   </td>
                   <td className="solved-count">{p.solvedCount.toLocaleString()}</td>

@@ -4,7 +4,9 @@
       "WebSearch",
       "Bash(npm create:*)",
       "Bash(mkdir -p \"/Users/hanszhu/Desktop/OIHOME/frontend/api/problems/[oj]/[contestId]\")",
-      "Bash(rm -f \"/Users/hanszhu/Desktop/OIHOME/frontend/api/problems/[oj]/[id].ts\")"
+      "Bash(rm -f \"/Users/hanszhu/Desktop/OIHOME/frontend/api/problems/[oj]/[id].ts\")",
+      "WebFetch(domain:www.cnblogs.com)",
+      "WebFetch(domain:blog.csdn.net)"
     ]
   }
 }

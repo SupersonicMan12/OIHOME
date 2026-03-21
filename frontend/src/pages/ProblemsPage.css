@@ -124,13 +124,14 @@
   font-weight: 600;
 }
 
-.r0    { color: #9e9e9e; }
-.r500  { color: #9e9e9e; }
-.r1000 { color: #4caf50; }
-.r1500 { color: #03a9f4; }
-.r2000 { color: #ff9800; }
-.r2500 { color: #f44336; }
-.r3000 { color: #f44336; }
+/* Luogu difficulty color scheme */
+.lg-beginner     { color: #FE4C61; } /* 入门 */
+.lg-basic-minus  { color: #F39C11; } /* 普及− */
+.lg-basic        { color: #FFC116; } /* 普及 */
+.lg-advanced     { color: #52C41A; } /* 普及+/提高 */
+.lg-advanced-plus{ color: #3498DB; } /* 提高+/省选− */
+.lg-provincial   { color: #9D3DCF; } /* 省选 */
+.lg-noi          { color: #7FBBFF; } /* NOI/CTSC (lightened for dark bg) */
 
 .solved-count {
   color: var(--text-muted);
