@@ -176,12 +176,14 @@ export default function ProblemPage() {
     }
   }, [oj, contestId, index, language, code, pollVerdict])
 
-  // Listen for auth callback posting back via postMessage (works on reconnect too)
+  // Listen for auth callback via BroadcastChannel
+  // (window.opener in /auth/cf is the CF popup, not this page — postMessage won't work)
   useEffect(() => {
     if (!showModal) return
-    const onMessage = (e: MessageEvent) => {
-      if (e.origin !== window.location.origin) return
+    const bc = new BroadcastChannel('cf_auth')
+    bc.onmessage = (e) => {
       if (e.data?.type !== 'cf_auth_success') return
+      bc.close()
       try { cfPopupRef.current?.close() } catch {}
       const fresh = loadCreds()
       setCreds(fresh)
@@ -194,8 +196,7 @@ export default function ProblemPage() {
         doSubmit(c.handle, c.sessionCookie, c.csrfToken)
       }, 1500)
     }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
+    return () => bc.close()
   }, [showModal, doSubmit])
 
   const handleSubmit = () => {

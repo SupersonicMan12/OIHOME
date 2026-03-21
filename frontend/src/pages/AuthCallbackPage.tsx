@@ -28,12 +28,13 @@ export default function AuthCallbackPage() {
     setHandle(existing.handle ?? '')
     setStatus('ok')
 
-    // Notify opener via postMessage — more reliable than storage event
-    // (storage event doesn't fire if value didn't change, e.g. on reconnect)
-    if (window.opener) {
-      window.opener.postMessage({ type: 'cf_auth_success' }, window.location.origin)
-      setTimeout(() => window.close(), 1500)
-    }
+    // BroadcastChannel reaches the OIHOME problem page regardless of opener chain
+    // (window.opener here is the CF popup, not the OIHOME page)
+    const bc = new BroadcastChannel('cf_auth')
+    bc.postMessage({ type: 'cf_auth_success' })
+    bc.close()
+
+    setTimeout(() => window.close(), 1500)
   }, [])
 
   return (
