@@ -6,9 +6,17 @@ import './ProblemPage.css'
 const LANGUAGES = ['C++', 'Python', 'Java', 'JavaScript']
 const CREDS_KEY = 'cf_credentials'
 
-// Extracts cookies + Codeforces.csrf from the CF page and sends both to /auth/cf
+// Extracts cookies + CSRF token from the CF page via multiple fallback methods
 const BOOKMARKLET_HREF =
-  "javascript:(function(){var csrf='';try{csrf=Codeforces.csrf||'';}catch(e){}var w=400,h=300,l=Math.round(screen.width/2-w/2),t=Math.round(screen.height/2-h/2);window.open('https://oihome.vercel.app/auth/cf#c='+encodeURIComponent(document.cookie)+'&csrf='+encodeURIComponent(csrf),'_blank','width='+w+',height='+h+',left='+l+',top='+t+',toolbar=0,menubar=0,scrollbars=0');})();"
+  "javascript:(function(){" +
+  "var csrf='';" +
+  "try{csrf=Codeforces.csrf||'';}catch(e){}" +
+  "if(!csrf){var inp=document.querySelector('input[name=\"csrf_token\"]');if(inp)csrf=inp.value||'';}" +
+  "if(!csrf){var m=document.cookie.match(/X-Csrf-Token=([^;]+)/);if(m)csrf=m[1];}" +
+  "if(!csrf){var m2=(document.body.innerHTML||'').match(/csrf['\"]\\s*[=:]\\s*['\"]([a-f0-9]{32,})/i);if(m2)csrf=m2[1];}" +
+  "var w=400,h=300,l=Math.round(screen.width/2-w/2),t=Math.round(screen.height/2-h/2);" +
+  "window.open('https://oihome.vercel.app/auth/cf#c='+encodeURIComponent(document.cookie)+'&csrf='+encodeURIComponent(csrf),'_blank','width='+w+',height='+h+',left='+l+',top='+t+',toolbar=0,menubar=0,scrollbars=0');" +
+  "})();"
 
 interface ProblemData {
   title: string
@@ -312,8 +320,9 @@ export default function ProblemPage() {
                         const w = 520, h = 420
                         const l = Math.round(screen.width / 2 - w / 2)
                         const t = Math.round(screen.height / 2 - h / 2)
+                        // Open the submit page — it always has Codeforces.csrf initialized
                         cfPopupRef.current = window.open(
-                          'https://codeforces.com',
+                          `https://codeforces.com/contest/${contestId}/submit`,
                           'cf_auth',
                           `width=${w},height=${h},left=${l},top=${t},toolbar=0,menubar=0,scrollbars=1`
                         )

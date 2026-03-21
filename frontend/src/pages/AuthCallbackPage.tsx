@@ -5,6 +5,7 @@ const CREDS_KEY = 'cf_credentials'
 export default function AuthCallbackPage() {
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
   const [handle, setHandle] = useState('')
+  const [debug, setDebug] = useState<{ cookieCount: number; csrfFound: boolean; csrfPreview: string }>()
 
   useEffect(() => {
     // Hash format: #c=<encodeURIComponent(cookies)>&csrf=<encodeURIComponent(csrfToken)>
@@ -15,6 +16,12 @@ export default function AuthCallbackPage() {
     const params = new URLSearchParams(raw)
     const cookieStr = params.get('c') ?? ''
     const csrfToken = params.get('csrf') ?? ''
+
+    setDebug({
+      cookieCount: cookieStr ? cookieStr.split(';').length : 0,
+      csrfFound: !!csrfToken,
+      csrfPreview: csrfToken ? csrfToken.slice(0, 8) + '…' : '(empty)',
+    })
 
     if (!cookieStr) { setStatus('error'); return }
 
@@ -53,6 +60,11 @@ export default function AuthCallbackPage() {
           {handle && (
             <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: 0 }}>
               Logged in as <strong style={{ color: 'var(--text)' }}>{handle}</strong>
+            </p>
+          )}
+          {debug && (
+            <p style={{ color: 'var(--text-muted)', fontSize: 11, margin: 0, fontFamily: 'monospace' }}>
+              {debug.cookieCount} cookies · csrf: {debug.csrfPreview}
             </p>
           )}
           <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0 }}>
