@@ -131,7 +131,7 @@
 .lg-advanced     { color: #52C41A; } /* 普及+/提高 */
 .lg-advanced-plus{ color: #3498DB; } /* 提高+/省选− */
 .lg-provincial   { color: #9D3DCF; } /* 省选 */
-.lg-noi          { color: #7FBBFF; } /* NOI/CTSC (lightened for dark bg) */
+.lg-noi          { color: #0E1D69; } /* NOI/CTSC (lightened for dark bg) */
 
 .solved-count {
   color: var(--text-muted);
