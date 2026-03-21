@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { parse } from 'node-html-parser'
+import { parse } from 'node-html-parser' // used for error message extraction only
 
-// Codeforces programTypeId values
 const CF_LANG_IDS: Record<string, number> = {
   'C++': 54,        // C++17 (GCC 7-32)
   'Python': 31,     // Python 3
@@ -9,34 +8,10 @@ const CF_LANG_IDS: Record<string, number> = {
   'JavaScript': 34, // JavaScript (V8)
 }
 
-function extractSetCookies(headers: Headers): string[] {
-  if (typeof (headers as any).getSetCookie === 'function') {
-    return (headers as any).getSetCookie() as string[]
-  }
-  const raw = headers.get('set-cookie')
-  if (!raw) return []
-  return raw.split(/,(?=\s*\w+=)/)
-}
-
-function parseCookieHeaders(setCookies: string[]): Record<string, string> {
-  const map: Record<string, string> = {}
-  for (const header of setCookies) {
-    const pair = header.split(';')[0].trim()
-    const eq = pair.indexOf('=')
-    if (eq > 0) map[pair.slice(0, eq)] = pair.slice(eq + 1)
-  }
-  return map
-}
-
 function serializeCookies(map: Record<string, string>): string {
   return Object.entries(map).map(([k, v]) => `${k}=${v}`).join('; ')
 }
 
-function mergeCookieMaps(...maps: Record<string, string>[]): Record<string, string> {
-  return Object.assign({}, ...maps)
-}
-
-// Parse a raw cookie string (e.g. from browser DevTools) into a map
 function parseRawCookieString(raw: string): Record<string, string> {
   const map: Record<string, string> = {}
   for (const part of raw.split(';')) {
@@ -48,20 +23,6 @@ function parseRawCookieString(raw: string): Record<string, string> {
     }
   }
   return map
-}
-
-async function extractCsrf(html: string): Promise<string> {
-  // Try inline JS first — most reliable on CF
-  const jsMatch = html.match(/Codeforces\.csrf\s*=\s*'([a-f0-9]+)'/)
-  if (jsMatch) return jsMatch[1]
-
-  const root = parse(html)
-  const input = root.querySelector('input[name="csrf_token"]')
-  if (input?.getAttribute('value')) return input.getAttribute('value')!
-  const meta = root.querySelector('meta[name="X-Csrf-Token"]')
-  if (meta?.getAttribute('content')) return meta.getAttribute('content')!
-
-  return ''
 }
 
 const BROWSER_HEADERS = {
@@ -98,33 +59,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // ── Step 1: Fetch submit page using the user's session cookie ────────────
-    // Since the user is already logged into CF in their browser, their session
-    // cookies bypass Cloudflare challenges. We never touch the login form.
     const submitUrl = `https://codeforces.com/contest/${contestId}/submit`
-    let cookies = parseRawCookieString(sessionCookie)
+    const cookies = parseRawCookieString(sessionCookie)
 
-    const submitPageRes = await fetch(submitUrl, {
-      headers: {
-        ...BROWSER_HEADERS,
-        Cookie: serializeCookies(cookies),
-        Referer: 'https://codeforces.com/',
-      },
-    })
-
-    const submitPageHtml = await submitPageRes.text()
-    cookies = mergeCookieMaps(cookies, parseCookieHeaders(extractSetCookies(submitPageRes.headers)))
-
-    // Check if we're logged in (CF redirects to login page if not)
-    if (submitPageHtml.includes('handle or email') || submitPageRes.url?.includes('/enter')) {
-      res.status(401).json({ error: 'Session expired — please update your CF session cookie in account settings' })
-      return
-    }
-
-    const submitCsrf = await extractCsrf(submitPageHtml)
+    // The CSRF token is stored directly in the cookies as X-Csrf-Token —
+    // no need to fetch the submit page (which Cloudflare blocks from server IPs).
+    const submitCsrf = cookies['X-Csrf-Token'] ?? cookies['x-csrf-token'] ?? ''
     if (!submitCsrf) {
-      const preview = submitPageHtml.slice(0, 400).replace(/\s+/g, ' ')
-      res.status(502).json({ error: `Could not extract CSRF token from submit page. Preview: ${preview}` })
+      res.status(401).json({
+        error: 'Could not find X-Csrf-Token in your session cookies. Try reconnecting your CF account.',
+      })
       return
     }
 
