@@ -5,6 +5,9 @@ import './ProblemPage.css'
 
 const LANGUAGES = ['C++', 'Python', 'Java', 'JavaScript']
 const CREDS_KEY = 'cf_credentials'
+const CF_LANG_IDS: Record<string, number> = {
+  'C++': 54, 'Python': 31, 'Java': 60, 'JavaScript': 34,
+}
 
 // Extracts cookies + CSRF token from the CF page via multiple fallback methods
 const BOOKMARKLET_HREF =
@@ -149,25 +152,53 @@ export default function ProblemPage() {
     }, 2000)
   }, [contestId])
 
-  const doSubmit = useCallback(async (handle: string, sessionCookie: string, csrfToken: string) => {
+  const doSubmit = useCallback(async (handle: string, _sessionCookie: string, csrfToken: string) => {
     setSubmitting(true)
     setSubmitError(null)
     setVerdictData({ verdict: 'SUBMITTING' })
+
+    // Submit directly from the browser — credentials: 'include' sends the user's CF
+    // cookies automatically. Cloudflare sees a real browser request, not a server IP.
+    // The CORS response will be blocked/opaque, but CF still processes the submission.
+    const submitUrl = `https://codeforces.com/contest/${contestId}/submit`
+    const body = new URLSearchParams({
+      csrf_token: csrfToken,
+      action: 'submitSolutionFormSubmitted',
+      submittedProblemIndex: index!,
+      programTypeId: String(CF_LANG_IDS[language] ?? 54),
+      contestId: contestId!,
+      source: code,
+      tabSize: '4',
+      sourceFile: '',
+    })
+
     try {
-      const res = await fetch('/api/submit', {
+      await fetch(`${submitUrl}?csrf_token=${csrfToken}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oj, contestId, index, language, code, handle, sessionCookie, csrfToken }),
+        credentials: 'include',
+        body,
+        redirect: 'manual',
       })
+    } catch {
+      // CORS network error is expected — CF still processed the request
+    }
+
+    // Wait for CF to register the submission, then poll for the ID + verdict
+    await new Promise(r => setTimeout(r, 2500))
+    try {
+      const res = await fetch(
+        `/api/submit?handle=${encodeURIComponent(handle)}&contestId=${contestId}`
+      )
       const data = await res.json()
-      if (!res.ok || data.error) {
-        setSubmitError(data.error ?? 'Submission failed')
+      if (data.error) {
+        setSubmitError(data.error)
         setVerdictData(null)
         setSubmitting(false)
         return
       }
       if (!data.submissionId) {
-        setVerdictData({ verdict: 'TESTING' })
+        setSubmitError('Submission may have failed — no new submission found. Try reconnecting your CF account.')
+        setVerdictData(null)
         setSubmitting(false)
         return
       }
@@ -178,11 +209,11 @@ export default function ProblemPage() {
         setSubmitting(false)
       }
     } catch {
-      setSubmitError('Network error — could not reach submission API')
+      setSubmitError('Network error — could not reach verdict API')
       setVerdictData(null)
       setSubmitting(false)
     }
-  }, [oj, contestId, index, language, code, pollVerdict])
+  }, [contestId, index, language, code, pollVerdict])
 
   // Listen for auth callback via BroadcastChannel
   // (window.opener in /auth/cf is the CF popup, not this page — postMessage won't work)
