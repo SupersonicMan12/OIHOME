@@ -157,11 +157,18 @@ export default function ProblemPage() {
     setSubmitError(null)
     setVerdictData({ verdict: 'SUBMITTING' })
 
-    // Submit directly from the browser — credentials: 'include' sends the user's CF
-    // cookies automatically. Cloudflare sees a real browser request, not a server IP.
-    // The CORS response will be blocked/opaque, but CF still processes the submission.
-    const submitUrl = `https://codeforces.com/contest/${contestId}/submit`
-    const body = new URLSearchParams({
+    // Use an HTML form submission targeting a tiny off-screen window.
+    // Form submissions are top-level navigations, so SameSite=Lax cookies (CF's session)
+    // ARE included — unlike fetch/XHR which are sub-resource requests and get blocked.
+    // Cloudflare sees a real browser form POST with real cookies. No CORS issues.
+    const win = window.open('', 'cf_submit', 'width=1,height=1,left=-2000,top=-2000')
+
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = `https://codeforces.com/contest/${contestId}/submit?csrf_token=${csrfToken}`
+    form.target = 'cf_submit'
+
+    const fields: Record<string, string> = {
       csrf_token: csrfToken,
       action: 'submitSolutionFormSubmitted',
       submittedProblemIndex: index!,
@@ -170,21 +177,24 @@ export default function ProblemPage() {
       source: code,
       tabSize: '4',
       sourceFile: '',
-    })
-
-    try {
-      await fetch(`${submitUrl}?csrf_token=${csrfToken}`, {
-        method: 'POST',
-        credentials: 'include',
-        body,
-        redirect: 'manual',
-      })
-    } catch {
-      // CORS network error is expected — CF still processed the request
+    }
+    for (const [name, value] of Object.entries(fields)) {
+      const input = document.createElement('input')
+      input.type = 'hidden'
+      input.name = name
+      input.value = value
+      form.appendChild(input)
     }
 
-    // Wait for CF to register the submission, then poll for the ID + verdict
-    await new Promise(r => setTimeout(r, 2500))
+    document.body.appendChild(form)
+    form.submit()
+    document.body.removeChild(form)
+
+    // Close the tiny window after CF processes the submission
+    setTimeout(() => { try { win?.close() } catch {} }, 2000)
+
+    // Poll our API (which calls CF's public API) for the new submission
+    await new Promise(r => setTimeout(r, 3000))
     try {
       const res = await fetch(
         `/api/submit?handle=${encodeURIComponent(handle)}&contestId=${contestId}`
@@ -197,7 +207,7 @@ export default function ProblemPage() {
         return
       }
       if (!data.submissionId) {
-        setSubmitError('Submission may have failed — no new submission found. Try reconnecting your CF account.')
+        setSubmitError('No submission found — your CSRF token may be stale. Click ⚡ to reconnect.')
         setVerdictData(null)
         setSubmitting(false)
         return
